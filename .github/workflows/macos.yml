@@ -1,0 +1,31 @@
+name: macOS demo
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test-build:
+    runs-on: macos-14
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: swift --version
+      - name: Core, OS-peer and isolation-policy tests
+        run: swift test
+      - name: Validate setup scripts
+        run: bash -n scripts/*.sh
+      - name: Build native app bundles (Apple Silicon and Intel)
+        env:
+          USERBOX_UNIVERSAL: '1'
+        run: bash scripts/build.sh
+      - name: Package demo
+        run: ditto -c -k --sequesterRsrc --keepParent dist UserBox-macOS-demo.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: UserBox-macOS-demo
+          path: UserBox-macOS-demo.zip
+          retention-days: 14
+      # This runner does not prove a second interactive Aqua login. See docs/acceptance.md.
