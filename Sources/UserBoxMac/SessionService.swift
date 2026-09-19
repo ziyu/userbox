@@ -37,13 +37,14 @@ import CUserBox
                             let request = try Wire.receive(Request.self, from: fd)
                             let payload = try Wire.read(fd, count: request.payloadBytes, maximum: Wire.maxPayload)
                             let ready = DispatchSemaphore(value: 0)
-                            var result: (Reply, Data)?
+                            let slot = Synchronized<(Reply, Data)?>(nil)
                             Task { @MainActor [weak self] in
-                                result = await self?.handle(request, payload: payload, owner: connection)
+                                let response = await self?.handle(request, payload: payload, owner: connection)
+                                slot.withLock { $0 = response }
                                 ready.signal()
                             }
                             ready.wait()
-                            guard let result else { break }
+                            guard let result = slot.withLock({ $0 }) else { break }
                             try Wire.send(result.0, to: fd); try Wire.write(fd, data: result.1)
                         }
                     } catch { /* Disconnects release the control lease; never log payloads. */ }

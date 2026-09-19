@@ -154,23 +154,21 @@ import UserBoxMac
             try await claim("agent")
             status = "Focus the host typing probe now; keep the physical mouse still during this test."
             try await Task.sleep(nanoseconds: 2_000_000_000)
-            let initialApp = NSWorkspace.shared.frontmostApplication?.processIdentifier
-            let initialCursor = NSEvent.mouseLocation
-            let window = NSApp.mainWindow
-            let initialFocus = window?.firstResponder
-            var appChanged = false, pointerChanged = false, focusChanged = false
-            let timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in
-                appChanged = appChanged || NSWorkspace.shared.frontmostApplication?.processIdentifier != initialApp
-                pointerChanged = pointerChanged || NSEvent.mouseLocation != initialCursor
-                focusChanged = focusChanged || window?.firstResponder !== initialFocus
+            let probe = HostIsolationProbe()
+            let observation = Task { @MainActor in
+                while !Task.isCancelled {
+                    probe.sample()
+                    try? await Task.sleep(nanoseconds: 50_000_000)
+                }
             }
-            defer { timer.invalidate() }
+            defer { observation.cancel() }
             var request = Request("smoke"); request.lease = lease
             let result = try await client().call(request)
-            let passed = !appChanged && !pointerChanged && !focusChanged
+            probe.sample()
+            let passed = !probe.appChanged && !probe.pointerChanged && !probe.focusChanged
             let report: [String: Any] = ["date": ISO8601DateFormatter().string(from: Date()), "box": name,
-                "nativeFileVerification": result.0.result ?? "", "hostForegroundChanged": appChanged,
-                "hostCursorChanged": pointerChanged, "hostFocusChanged": focusChanged,
+                "nativeFileVerification": result.0.result ?? "", "hostForegroundChanged": probe.appChanged,
+                "hostCursorChanged": probe.pointerChanged, "hostFocusChanged": probe.focusChanged,
                 "overallPassed": passed, "note": "Human mouse/focus changes invalidate the deterministic host-isolation phase. No host keystrokes or screenshots are recorded."]
             let folder = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/UserBox")
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)

@@ -22,15 +22,15 @@ public final class DesktopBootstrap: @unchecked Sendable {
                     parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: .any)
                     let listener = try NWListener(using: parameters)
                     self.listener = listener
-                    var resumed = false
+                    let resumed = Synchronized(false)
                     listener.stateUpdateHandler = { state in
                         switch state {
                         case .ready:
-                            if !resumed, let port = listener.port { resumed = true; continuation.resume(returning: port.rawValue) }
+                            if let port = listener.port, resumed.withLock({ if $0 { return false }; $0 = true; return true }) { continuation.resume(returning: port.rawValue) }
                         case .failed(let error):
-                            if !resumed { resumed = true; continuation.resume(throwing: error) }
+                            if resumed.withLock({ if $0 { return false }; $0 = true; return true }) { continuation.resume(throwing: error) }
                         case .cancelled:
-                            if !resumed { resumed = true; continuation.resume(throwing: BoxError("Desktop login relay cancelled")) }
+                            if resumed.withLock({ if $0 { return false }; $0 = true; return true }) { continuation.resume(throwing: BoxError("Desktop login relay cancelled")) }
                         default: break
                         }
                     }
