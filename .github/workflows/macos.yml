@@ -1,0 +1,28 @@
+name: macOS prototype
+on:
+  push:
+    paths: ["Sources/**", "Tests/**", "Package.swift", "scripts/build-app.sh", ".github/workflows/macos.yml"]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-build:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and test protocol/isolation logic
+        run: swift test
+      - name: Build the native app and verify CommonCrypto vectors
+        run: bash scripts/build-app.sh
+      - name: Validate provisioning scripts without running them
+        run: for script in scripts/*.sh; do bash -n "$script"; done
+      - name: Package app (current runner architecture)
+        run: ditto -c -k --keepParent dist/UserBox.app dist/UserBox-macOS.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: UserBox-macOS
+          path: dist/UserBox-macOS.zip
+          if-no-files-found: error
+# CI does NOT enable Screen Sharing, create users, or certify a real GUI session.
