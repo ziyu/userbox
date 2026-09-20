@@ -16,9 +16,25 @@ public struct Frame {
         for row in 0..<h { let dst = ((y+row)*width+x)*4; let src = row*w*4; bytes.replaceSubrange(dst..<(dst+w*4), with: incoming[src..<(src+w*4)]) }
     }
     public mutating func copy(x: Int, y: Int, w: Int, h: Int, sx: Int, sy: Int) throws {
-        try bounds(x,y,w,h); try bounds(sx,sy,w,h)
-        var source: [UInt8] = []; source.reserveCapacity(w*h*4)
-        for row in 0..<h { source += bytes[((sy+row)*width+sx)*4..<((sy+row)*width+sx+w)*4] }
+        try bounds(x,y,w,h)
+        try bounds(sx,sy,w,h)
+
+        let bytesPerPixel = 4
+        let rowByteCount = w * bytesPerPixel
+        var source: [UInt8] = []
+        source.reserveCapacity(rowByteCount * h)
+
+        // Snapshot all source rows before writing: CopyRect regions may overlap.
+        // Keep offset arithmetic separate from slicing and appending so Swift's
+        // type checker does not need to solve one large overloaded expression.
+        for row in 0..<h {
+            let sourceRow = sy + row
+            let startPixel = sourceRow * width + sx
+            let startByte = startPixel * bytesPerPixel
+            let endByte = startByte + rowByteCount
+            source.append(contentsOf: bytes[startByte..<endByte])
+        }
+
         try raw(x:x,y:y,w:w,h:h,bytes:source)
     }
     public func bounds(_ x: Int,_ y: Int,_ w: Int,_ h: Int) throws {
